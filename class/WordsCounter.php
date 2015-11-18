@@ -41,7 +41,7 @@ class WordsCounter
             $content = '';
             while (!feof($fp)) {
                 $content .= fread($fp, self::READ_BYTES_FROM_FILE);
-                // Есть вероятность что слово будет считано целиком
+                // Есть вероятность что слово будет считано не целиком
                 $lastSpacePosition = strripos($content, ' ');
                 if ($lastSpacePosition !== false) {
                     $words = substr($content, 0, $lastSpacePosition);
