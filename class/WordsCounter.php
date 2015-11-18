@@ -8,7 +8,7 @@
  */
 class WordsCounter
 {
-    const WRITE_CYCLES = 1;
+    const WRITE_CYCLES = 100000000;
 
     const MAX_WORDS_IN_MEMORY = 100;
     const READ_BYTES_FROM_FILE = 10000;
@@ -19,71 +19,79 @@ class WordsCounter
 
     const TEST_WORDS = 'Мама мыла раму, маме мыла мало.';
 
+    const READ_FILE = 'r';
+    const WRITE_TO_FILE = 'w+';
+
     public function __construct()
     {
-        fclose($this->open(self::CACHING_FILE, 'w+'));
-        $this->generateWords();
+        // Очищаем файл в котором хранятся результаты подсчета
+        $this->close($this->open(self::CACHING_FILE, self::WRITE_TO_FILE));
+
+        $this->usedMemory();
     }
 
     /**
-     * Count words in test file
+     * Подсчет слов в файле
      * @throws Exception
      */
     public function countWords()
     {
-        if (($fp = $this->open(self::READING_FILE, 'r'))) {
+        $this->usedMemory();
+        if (($fp = $this->open(self::READING_FILE, self::READ_FILE))) {
             $content = '';
             while (!feof($fp)) {
                 $content .= fread($fp, self::READ_BYTES_FROM_FILE);
-                // If the last word is not completely, this part of the words for the next cycle
+                // Есть вероятность что слово будет считано целиком
                 $lastSpacePosition = strripos($content, ' ');
-                $words = substr($content, 0, $lastSpacePosition);
-                $content = substr($content, $lastSpacePosition, mb_strlen($content, 'UTF-8'));
+                if ($lastSpacePosition !== false) {
+                    $words = substr($content, 0, $lastSpacePosition);
+                    $content = ltrim(substr($content, $lastSpacePosition, mb_strlen($content, 'UTF-8')), ' ');
 
-                $this->saveWords($words);
-
-                $this->output("Memory is usage: " . round(memory_get_usage() / 1024) . "kb");
+                    $this->saveWords($words);
+                }
             }
 
-            var_dump($content);
-            $this->saveWords($content);
+            $this->saveWords(rtrim($content));
 
             $this->dumpResult();
         }
+
+        $this->usedMemory();
     }
 
     /**
-     * Generate test file with words
+     * Генерация тестового файла со словами
      * @throws Exception
      */
     public function generateWords()
     {
         $this->output("Generate test file");
-        if (($fp = $this->open(self::READING_FILE, 'w+'))) {
+        if (($fp = $this->open(self::READING_FILE, self::WRITE_TO_FILE))) {
             for ($i = 0; $i < self::WRITE_CYCLES; $i++) {
-                fwrite($fp, self::TEST_WORDS);
+                fwrite($fp, self::TEST_WORDS . PHP_EOL);
             }
-            fclose($fp);
+            $this->close($fp);
         }
+        $this->usedMemory();
     }
 
     /**
-     * Print total words
+     * Вывод итог подсчета
      * @throws Exception
      */
     public function printResult()
     {
         $this->output("Result");
-        if (($fp = $this->open(self::CACHING_FILE, 'r'))) {
+        if (($fp = $this->open(self::CACHING_FILE, self::READ_FILE))) {
             while (!feof($fp)) {
                 echo fread($fp, self::READ_BYTES_FROM_FILE);
             }
-            fclose($fp);
+            $this->close($fp);
         }
     }
 
     /**
-     * Save words in cache
+     * Подсчет слов и сохранение слов в кэше
      * @param $string
      */
     protected function saveWords($string)
@@ -107,7 +115,7 @@ class WordsCounter
     }
 
     /**
-     * Remove all noy alphabetic symbols
+     * Удаление всех не используемых в подсчете символов
      * @param $string
      * @return mixed
      */
@@ -117,9 +125,9 @@ class WordsCounter
     }
 
     /**
-     * Open file
-     * @param $file
-     * @param $mode
+     * Открытие файла
+     * @param $file - путь до файла
+     * @param $mode - тип доступа
      * @return resource
      * @throws Exception
      */
@@ -134,9 +142,9 @@ class WordsCounter
     }
 
     /**
-     * Write to file
-     * @param $fp
-     * @param $string
+     * Запись в файл
+     * @param $fp - ссылка на файл
+     * @param $string - строка для записи
      */
     protected function write($fp, $string)
     {
@@ -144,15 +152,24 @@ class WordsCounter
     }
 
     /**
-     * Dump collected words to file
+     * Закрыть доступ к файлу
+     * @param $fp
+     */
+    protected function close($fp)
+    {
+        fclose($fp);
+    }
+
+    /**
+     * Сохранение подсчитаных слов в кэширующий файл
      * @throws Exception
      */
     protected function dumpResult()
     {
         $this->output("Dump words to file");
 
-        $fp = $this->open(self::CACHING_FILE, 'r');
-        $fpTemp = $this->open(self::TEMP_FILE, 'w+');
+        $fp = $this->open(self::CACHING_FILE, self::READ_FILE);
+        $fpTemp = $this->open(self::TEMP_FILE, self::WRITE_TO_FILE);
 
         if ($fp && $fpTemp) {
             while (($word = fgets($fp, self::READ_BYTES_FROM_FILE)) !== false) {
@@ -175,8 +192,8 @@ class WordsCounter
 
             $this->words = [];
 
-            fclose($fp);
-            fclose($fpTemp);
+            $this->close($fp);
+            $this->close($fpTemp);
 
             copy(self::TEMP_FILE, self::CACHING_FILE);
             unlink(self::TEMP_FILE);
@@ -184,12 +201,20 @@ class WordsCounter
     }
 
     /**
-     * Echo string to console
+     * Вывод строки в консоль
      * @param $string
      */
     protected function output($string)
     {
         echo date('Y-m-d H:i:s') . ' - ' . $string . PHP_EOL;
+    }
+
+    /**
+     * Выводит сколько оперативной памяти использует скрипт
+     */
+    protected function usedMemory()
+    {
+        $this->output("Memory is usage: " . round(memory_get_usage() / 1024) . "kb");
     }
 
     private $words = [];
